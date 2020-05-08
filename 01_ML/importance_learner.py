@@ -1,10 +1,8 @@
 import logging
 import pandas as pd
 pd.set_option('display.max_columns', None)
-import lightgbm as lgb
 import numpy as np
-from sklearn.model_selection import cross_val_score, cross_validate
-# from transliterate import translit, get_available_language_codes
+from sklearn.model_selection import cross_validate
 from sklearn.model_selection import KFold
 from sklearn.model_selection import StratifiedKFold
 from sklearn.utils.multiclass import type_of_target
@@ -15,6 +13,8 @@ from sklearn.preprocessing import StandardScaler
 import pickle
 import os
 from transliterate import translit
+import matplotlib
+matplotlib.rc('font', **{'size': 20})
 
 
 def sort_cols_by_type(data):
@@ -71,7 +71,7 @@ def preprocess_mag(path_data='../DATA/01_MAG/first.csv',
                     use_translit=True,
                     use_multiclass=False,
                     extra_columns_to_categorize=(),
-                    target_type='clf',
+                    target_type='reg',
                     scale=False):
 
     if target_type not in ['clf', 'reg', 'bimod']:
@@ -107,15 +107,12 @@ def preprocess_mag(path_data='../DATA/01_MAG/first.csv',
 
 class Task:
     def __init__(self, data, target, type_of_importance_model, estimator_fit,
-                 estimator_importance, metrics_to_estimate, n_splits, random_state, dataset):
+                 estimator_importance, metrics_to_estimate, n_splits, random_state, dataset, postfix=''):
 
         if data.shape[0] != target.shape[0]:
             raise ValueError('Shapes of data and target are different. Check it out!')
 
         allowed_types_of_task = ['classification', 'regression']
-        # if type_of_task not in allowed_types_of_task:
-        #     raise AttributeError(f'type_of_task should be in {allowed_types_of_task}. Got: {type_of_task}')
-
         if dataset.upper() not in ['MAG', 'TEMP']:
             raise AttributeError(f'dataset should be in [MAG, TEMP]')
 
@@ -128,17 +125,16 @@ class Task:
         self.estimator_importance_alias = self.return_alias(self.estimator_importance.__class__.__name__)
 
         self.type_of_importance_model = type_of_importance_model
-        # self.type_of_task = type_of_task
         self.dataset = dataset
 
         self.columns = data.columns
-        # self.folder = self._generate_name_dir()
         self.dataset = dataset.upper()
 
         self.data = data
         self.target = target
         self.metrics_to_estimate = metrics_to_estimate
         self.folder_upper_level = 'experiments'
+        self.postfix = postfix
 
         self.path = os.path.join(self.folder_upper_level, self.dataset, self._generate_subdir_name())
         os.makedirs(self.path)
@@ -198,7 +194,7 @@ class Task:
         else:
             now = time
 
-        return f'-{self.estimator_fit_alias}-{self.estimator_importance_alias}-{self.dataset}-{now.strftime("%d-%m-%Y--%H-%M-%S")}'
+        return f'{self.estimator_fit_alias}-{self.estimator_importance_alias}-{self.dataset}-{self.postfix}-{now.strftime("%d-%m-%Y--%H-%M-%S")}'
 
 
     def metrics_on_validation(self, data, target):
@@ -241,17 +237,23 @@ class Task:
 
         for metric in metrics_to_plot:
             plt.figure(figsize=(20, 15))
-            plt.title(f'{metric}')
+            plt.title(f'{self.estimator_fit_alias}-{self.estimator_importance_alias}-{self.postfix}-{self.dataset}-{metric}')
 
             plt.plot(concat_scores[concat_scores.type == 'omit']['num_features'],
                      concat_scores[concat_scores.type == 'omit'][metric],
-                     label='Omit')
+                     label='skip-n-features-from-top')
 
             plt.plot(concat_scores[concat_scores.type == 'only']['num_features'],
                      concat_scores[concat_scores.type == 'only'][metric],
-                     label='only')
+                     label='leave-n-features-from-top')
+
+            plt.xlabel('num features')
+            plt.ylabel('score value')
+            plt.xticks(concat_scores[concat_scores.type == 'omit']['num_features'])
 
             plt.legend()
+            plt.grid()
+
             plt.savefig(os.path.join(self.path, f'fig_{metric}'))
 
 
@@ -259,7 +261,7 @@ class Task:
     def run(self, top_k_features=20):
 
         whole = self.metrics_on_validation(data=self.data, target=self.target)
-        pd.DataFrame(list(whole)).to_csv(os.path.join(self.path, 'whole.csv'))
+        pd.DataFrame(whole, index=['whole']).to_csv(os.path.join(self.path, 'whole.csv'))
 
         self.estimator_importance.fit(X=self.data, y=self.target)
 
@@ -287,37 +289,7 @@ class Task:
 
 
         self.save_plots(pd.DataFrame(scores))
-
-
-        # only_pd = pd.DataFrame(only_list + [whole])
-        # only_pd['num_top'] = list(range(len(self.top_features_list))) + ['whole']
-        # only_pd.to_csv(os.path.join(self.path, 'only_pd.csv'))
-        #
-        # ommit_pd = pd.DataFrame(ommit_list + [whole])
-        # ommit_pd['num_top'] = list(range(len(self.top_features_list))) + ['whole']
-        # ommit_pd.to_csv(os.path.join(self.path, 'ommit_pd.csv'))
-        #
-        # joined_pd = ommit_pd.join(only_pd, lsuffix='_ommit', rsuffix='_only')
-        #
-        # for metric in self.metrics_to_estimate:
-        #     print(metric)
-        #     whole_value = joined_pd[metric + '_ommit'].iloc[-1]
-        #
-        #     metric_values_omit = joined_pd[metric +'_ommit'][:-1]
-        #     metric_values_only = joined_pd[metric + '_only'][:-1]
-        #
-        #     # print(metric_values, whole_value)
-        #
-        #     plt.figure(figsize=(20, 15))
-        #     plt.title(f'Changing TopK features {metric}')
-        #     plt.plot(metric_values_omit, label='Omit')
-        #     plt.plot(metric_values_only, label='Only')
-        #     plt.plot(list(range(len(self.top_features_list))), [whole_value] * len(metric_values_omit), label='whole')
-        #     plt.legend()
-        #     plt.savefig(os.path.join(self.path, f'fig_{metric}'))
-
         return self
-
 
 
 
@@ -328,49 +300,3 @@ class Task:
                                                                 target=self.target)
 
         return cross_val_dict_top_only, cross_val_dict_top_omitted
-
-        # cross_val_dict = cross_validate(estimator=estimator_evaluation,
-        #                                 X=data,
-        #                                 y=target,
-        #                                 cv=cv,
-        #                                 scoring=list_of_metrics_to_use,
-        #                                 n_jobs=-1)
-        # scores = {key: cross_val_dict['test_' + key].mean() for key in list_of_metrics_to_use}
-        #
-        # whole_data_fitted_model = estimator_importance.fit(X=data, y=target)
-        #
-        #
-        # top_features = sorted(zip(data.columns, whole_data_fitted_model.feature_importances_), key=lambda x: -x[1])[
-        #                :top_k_features]
-        # top_features_list = [val for val, _ in top_features]
-        #
-        # cross_val_dict_top_only = cross_validate(estimator=estimator_evaluation,
-        #                                          X=data[top_features_list],
-        #                                          y=target,
-        #                                          cv=cv,
-        #                                          scoring=list_of_metrics_to_use,
-        #                                          n_jobs=-1)
-        # scores_top_only = {key: cross_val_dict_top_only['test_' + key].mean() for key in list_of_metrics_to_use}
-        #
-        # cross_val_dict_top_omitted = cross_validate(estimator=estimator_evaluation,
-        #                                             X=data.drop(columns=top_features_list),
-        #                                             y=target,
-        #                                             cv=cv,
-        #                                             scoring=list_of_metrics_to_use,
-        #                                             n_jobs=-1)
-        # scores_top_omitted = {key: cross_val_dict_top_omitted['test_' + key].mean() for key in
-        #                       list_of_metrics_to_use}
-        #
-        # scores_df = pd.DataFrame([scores, scores_top_only, scores_top_omitted],
-        #                          index=['original', 'top_only', 'top_omitted'])
-        # scores_df = scores_df.join(scores_df.apply(lambda x: pd.Series(data=x.iloc[0] - x), axis=0),
-        #                            rsuffix='_diff')
-        # scores_df['num_top_features'] = top_k_features
-        #
-        # return (scores, scores_top_only, scores_top_omitted), scores_df, top_features
-
-
-
-
-
-
