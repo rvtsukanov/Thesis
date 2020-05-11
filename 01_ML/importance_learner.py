@@ -289,9 +289,11 @@ class Task:
 
                 self.save_myself()
 
+            self.save_plots(pd.DataFrame(scores))
+
         self.save_myself()
 
-        self.save_plots(pd.DataFrame(scores))
+
         return self
 
 
