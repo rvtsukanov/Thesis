@@ -36,7 +36,7 @@ for (dataset, data, target), estimator in itertools.product(reg_data, estimators
          metrics_to_estimate=metrics_reg,
          n_splits=6,
          random_state=42,
-         dataset=dataset, postfix='PCA').run(top_k_features=3)
+         dataset=dataset).run(top_k_features=20, add_remove=False)
     print('==================')
 
 
@@ -55,5 +55,5 @@ for (dataset, data, target), estimator in itertools.product(clf_data, estimators
          metrics_to_estimate=metrics_reg,
          n_splits=6,
          random_state=42,
-         dataset=dataset).run(top_k_features=20)
+         dataset=dataset).run(top_k_features=20, add_remove=False)
     print('==================')

@@ -221,7 +221,7 @@ class Task:
     def save_features(self, top):
         self.top_features_list = [val for val, _ in top]
 
-        pd.DataFrame(self.top_features_list).to_csv(os.path.join(self.path, 'top_features.csv'))
+        pd.DataFrame(self.top_features).to_csv(os.path.join(self.path, 'top_features.csv'))
 
         with open(os.path.join(self.path, 'top_features_list.txt'), 'w+') as f:
             for line in self.top_features_list:
@@ -258,7 +258,7 @@ class Task:
 
 
 
-    def run(self, top_k_features=20):
+    def run(self, top_k_features=20, add_remove=False):
 
         whole = self.metrics_on_validation(data=self.data, target=self.target)
         pd.DataFrame(whole, index=['whole']).to_csv(os.path.join(self.path, 'whole.csv'))
@@ -270,23 +270,26 @@ class Task:
 
         scores = []
 
-        for i in range(len(self.top_features_list)):
-            print(i, self.top_features_list[:i+1])
-            only, omit = self.one_run(features_to_proceed=self.top_features_list[:i+1])
+        if add_remove:
 
-            only['num_features'] = i + 1
-            only['type'] = 'only'
+            for i in range(len(self.top_features_list)):
+                print(i, self.top_features_list[:i+1])
+                only, omit = self.one_run(features_to_proceed=self.top_features_list[:i+1])
 
-            omit['num_features'] = i + 1
-            omit['type'] = 'omit'
+                only['num_features'] = i + 1
+                only['type'] = 'only'
 
-            scores.append(only)
-            scores.append(omit)
+                omit['num_features'] = i + 1
+                omit['type'] = 'omit'
 
-            pd.DataFrame(scores).to_csv(os.path.join(self.path, 'add_remove_scores.csv'))
+                scores.append(only)
+                scores.append(omit)
 
-            self.save_myself()
+                pd.DataFrame(scores).to_csv(os.path.join(self.path, 'add_remove_scores.csv'))
 
+                self.save_myself()
+
+        self.save_myself()
 
         self.save_plots(pd.DataFrame(scores))
         return self
